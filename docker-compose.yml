@@ -1,0 +1,61 @@
+version: "3"
+
+services:
+  zookeeper:
+    image: docker.io/bitnami/zookeeper:3.7
+    container_name: zookeper
+    networks:
+      - kafka-network
+    ports:
+      - "2181:2181"
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+
+  kafka:
+    image: docker.io/bitnami/kafka:3
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    networks:
+      - kafka-network
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    depends_on:
+      - zookeeper
+
+  kafka-init:
+    image: docker.io/bitnami/kafka:3
+    container_name: kafka-init
+    depends_on:
+      - kafka
+    entrypoint: [ '/bin/sh', '-c' ]
+    networks:
+      - kafka-network
+    command: |
+      "
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic kafka-example-topic --replication-factor 1 --partitions 1
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic kafka-example-topic --replication-factor 1 --partitions 1
+      "
+  kafkacat:
+    image: confluentinc/cp-kafkacat:3.0.1
+    container_name: kafkacat
+    depends_on:
+      - kafka-init
+    entrypoint: [ '/bin/sh', '-c' ]
+    networks:
+      - kafka-network
+    command: |
+      '
+      kafkacat -b kafka:9092 -L
+      kafkacat -b kafka:9092 -t kafka-example-topic -K: -P <<EOF 
+      1:{ "message": "first message" } 
+      2:{ "message": "second message" }
+      3:{ "message": "third message" } 
+      EOF
+      '
+
+networks:
+  kafka-network:
+    driver: bridge
